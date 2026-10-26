@@ -1,0 +1,11 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: ops-flow-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ops_flow}
+    username: ${SPRING_DATASOURCE_USERNAME:ops_flow}
+    password: ${SPRING_DATASOURCE_PASSWORD:ops_flow_local}
+    driver-class-name: org.postgresql.Driver

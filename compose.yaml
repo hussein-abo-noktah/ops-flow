@@ -1,0 +1,43 @@
+name: ops-flow
+
+services:
+  frontend:
+    build: ./frontend/ops-flow-ui
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build: ./backend/ops-flow-backend
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-ops_flow}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-ops_flow}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ops_flow_local}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ops_flow}
+      POSTGRES_USER: ${POSTGRES_USER:-ops_flow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ops_flow_local}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

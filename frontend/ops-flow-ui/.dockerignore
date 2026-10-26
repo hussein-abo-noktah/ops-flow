@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.vite/
+.git/
+.idea/
+*.iml
+.env
+.env.*
+*.log

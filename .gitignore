@@ -1,0 +1,32 @@
+# IDEs and operating systems
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local documentation
+/docs/
+
+# Frontend dependencies and output
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Java / Maven output
+target/
+*.class
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and temporary files
+*.log
+*.pid
+*.tmp
+*.swp
+*~
