@@ -3,9 +3,11 @@ package com.husseinabonoktah.opsflowbackend.auth.domain;
 
 import com.husseinabonoktah.opsflowbackend.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
 
 
 @Entity
+@Getter
 @Table(name = "permissions")
 public class Permission extends BaseEntity {
 

@@ -1,5 +1,6 @@
 package com.husseinabonoktah.opsflowbackend.organization.application;
 
+
 import com.husseinabonoktah.opsflowbackend.organization.domain.Organization;
 import com.husseinabonoktah.opsflowbackend.organization.api.request.CreateOrganizationRequest;
 import com.husseinabonoktah.opsflowbackend.organization.api.response.OrganizationResponse;
@@ -47,6 +48,7 @@ public class OrganizationService {
             throw new ResourceConflictException("Organization slug already exists: " + request.slug());
         }
         mapper.updateEntity(organization, request);
+
         return mapper.toResponse(repository.saveAndFlush(organization));
     }
 

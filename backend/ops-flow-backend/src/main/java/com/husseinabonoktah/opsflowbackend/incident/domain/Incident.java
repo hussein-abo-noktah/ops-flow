@@ -7,6 +7,7 @@ import com.husseinabonoktah.opsflowbackend.team.domain.Team;
 import com.husseinabonoktah.opsflowbackend.user.domain.User;
 import com.husseinabonoktah.opsflowbackend.shared.persistence.AuditableEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
 
 import java.time.Instant;
 
@@ -20,6 +21,7 @@ import java.time.Instant;
                 )
         }
 )
+@Getter
 public class Incident extends AuditableEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

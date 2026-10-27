@@ -3,5 +3,7 @@ target/
 .idea/
 *.iml
 .env
+secrets/
+*.pem
 .env.*
 *.log

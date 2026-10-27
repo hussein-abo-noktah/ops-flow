@@ -11,14 +11,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.Pbkdf2PasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -29,6 +29,7 @@ class UserIntegrationIT extends BaseIntegrationTest {
 
     @Autowired UserRepository repository;
     @Autowired OrganizationRepository organizations;
+    @Autowired PasswordEncoder passwordEncoder;
     private UUID organizationId;
 
     @BeforeEach
@@ -46,7 +47,8 @@ class UserIntegrationIT extends BaseIntegrationTest {
         var user = repository.findById(id).orElseThrow();
         String hash = user.getPasswordHash();
         assertThat(hash).isNotEqualTo(PASSWORD);
-        assertThat(Pbkdf2PasswordEncoder.defaultsForSpringSecurity_v5_8().matches(PASSWORD, hash)).isTrue();
+        assertThat(passwordEncoder.matches(PASSWORD, hash)).isTrue();
+        assertThat(passwordEncoder.matches("incorrect-password", hash)).isFalse();
         mvc.perform(get(URL + "/" + id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.organizationId").value(organizationId.toString()))
@@ -57,7 +59,7 @@ class UserIntegrationIT extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.updatedAt").isNotEmpty())
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
-        mvc.perform(put(URL + "/" + id).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put(URL + "/" + id).contentType(MediaType.APPLICATION_JSON)
                         .content(updateBody("alice@example.com", organizationId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.firstName").value("Updated"))
@@ -69,10 +71,10 @@ class UserIntegrationIT extends BaseIntegrationTest {
     void rejectsDuplicateEmailOnCreateAndUpdate() throws Exception {
         create("alice@example.com");
         UUID second = create("second@example.com");
-        mvc.perform(post(URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(" ALICE@EXAMPLE.COM ", organizationId)))
                 .andExpect(status().isConflict());
-        mvc.perform(put(URL + "/" + second).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put(URL + "/" + second).contentType(MediaType.APPLICATION_JSON)
                         .content(updateBody("ALICE@example.com", organizationId)))
                 .andExpect(status().isConflict());
         assertThat(repository.findById(second).orElseThrow().getEmail()).isEqualTo("second@example.com");
@@ -93,14 +95,14 @@ class UserIntegrationIT extends BaseIntegrationTest {
     void returnsNotFoundForMissingUserOrOrganization() throws Exception {
         String missing = URL + "/" + UUID.randomUUID();
         mvc.perform(get(missing)).andExpect(status().isNotFound());
-        mvc.perform(put(missing).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put(missing).contentType(MediaType.APPLICATION_JSON)
                         .content(updateBody("missing@example.com", organizationId)))
                 .andExpect(status().isNotFound());
-        mvc.perform(post(URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody("missing@example.com", UUID.randomUUID())))
                 .andExpect(status().isNotFound());
         UUID id = create("existing@example.com");
-        mvc.perform(put(URL + "/" + id).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put(URL + "/" + id).contentType(MediaType.APPLICATION_JSON)
                         .content(updateBody("changed@example.com", UUID.randomUUID())))
                 .andExpect(status().isNotFound());
         assertThat(repository.findById(id).orElseThrow().getEmail()).isEqualTo("existing@example.com");
@@ -109,9 +111,9 @@ class UserIntegrationIT extends BaseIntegrationTest {
     @ParameterizedTest
     @ValueSource(strings = {"{}", "{", "{\"email\":\"bad-email\"}"})
     void rejectsInvalidRequests(String body) throws Exception {
-        mvc.perform(post(URL).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+        mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
-        mvc.perform(put(URL + "/" + UUID.randomUUID()).with(csrf())
+        mvc.perform(put(URL + "/" + UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
         assertThat(repository.count()).isZero();
@@ -126,7 +128,7 @@ class UserIntegrationIT extends BaseIntegrationTest {
                 valid.replace(PASSWORD, "p".repeat(129)),
                 valid.replace(" Alice ", " "),
                 valid.replace(" Alice ", "a".repeat(101))}) {
-            mvc.perform(post(URL).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(invalid))
+            mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(invalid))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors").exists());
         }
         assertThat(repository.count()).isZero();
@@ -142,17 +144,29 @@ class UserIntegrationIT extends BaseIntegrationTest {
     @WithAnonymousUser
     void requiresAuthentication() throws Exception {
         mvc.perform(get(URL).accept(MediaType.APPLICATION_JSON)).andExpect(status().isUnauthorized());
+        mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody("alice@example.com", organizationId)))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put(URL + "/" + UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody("alice@example.com", organizationId)))
+                .andExpect(status().isUnauthorized());
+        assertThat(repository.count()).isZero();
     }
 
     @Test
-    void requiresCsrfForWrites() throws Exception {
-        mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)
+    void acceptsJwtAuthenticatedWritesWithoutCsrf() throws Exception {
+        mvc.perform(post(URL).with(jwt()).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody("alice@example.com", organizationId)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isCreated());
+        UUID id = repository.findByEmailIgnoreCase("alice@example.com").orElseThrow().getId();
+        mvc.perform(put(URL + "/" + id).with(jwt()).contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody("alice@example.com", organizationId)))
+                .andExpect(status().isOk());
+        assertThat(repository.findById(id).orElseThrow().getFirstName()).isEqualTo("Updated");
     }
 
     private UUID create(String email) throws Exception {
-        mvc.perform(post(URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(email, organizationId)))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", org.hamcrest.Matchers.startsWith(URL + "/")))

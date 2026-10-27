@@ -3,11 +3,13 @@ package com.husseinabonoktah.opsflowbackend.auth.domain;
 import com.husseinabonoktah.opsflowbackend.organization.domain.Organization;
 import com.husseinabonoktah.opsflowbackend.shared.persistence.AuditableEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
 
 import java.util.HashSet;
 import java.util.Set;
 
 @Entity
+@Getter
 @Table(
         name = "roles",
         uniqueConstraints = {
@@ -43,6 +45,17 @@ public class Role extends AuditableEntity {
             inverseJoinColumns = @JoinColumn(name = "permission_id")
     )
     private Set<Permission> permissions = new HashSet<>();
+
     protected Role() {
+    }
+
+    public static Role platformAdmin(Organization organization) {
+        Role role = new Role();
+        role.organization = organization;
+        role.name = "Platform Admin";
+        role.code = "PLATFORM_ADMIN";
+        role.description = "Initial platform administrator";
+        role.system = true;
+        return role;
     }
 }
