@@ -192,7 +192,7 @@ From `backend/ops-flow-backend`, run:
 
 Maven runs unit tests with Surefire and `*IT` integration tests with Failsafe. Integration tests require Docker and use PostgreSQL 17 with Flyway migrations and Hibernate schema validation.
 
-The latest full verification passes the auth/bootstrap tests but still reports three failures in the existing user/organization tests: two expect CSRF protection for writes, and one expects the previous password-hash format. Those assertions need to be aligned with the current stateless JSON-token API and BCrypt configuration.
+The user and organization integration tests verify that JWT-authenticated writes work without CSRF tokens and anonymous writes return 401. Password persistence is checked using the application's configured `PasswordEncoder`, including password matching and preserving the hash during user updates.
 
 `AuthIntegrationIT` defines an auth-specific application context and covers JSON login/refresh/logout, concurrent rotation, replay revocation, inactive accounts, expiry, JWT validation, CORS, and request validation. `JwtConfigTest` checks RSA PEM loading, key size and pairing, public-key verification, RS256 enforcement, and lifetime configuration. Bootstrap tests cover startup provisioning, login, the system administrator role, repeat/concurrent invocations, and credential validation. Organization and user integration tests remain in their respective packages.
 
