@@ -1,112 +1,199 @@
 # ops-flow
-Operation Management Platform
 
-## Continuous integration
+Operation Management Platform, currently under development.
 
-The GitHub Actions workflow in `.github/workflows/ci.yml` runs on pushes, pull
-requests, and manual dispatches. Two jobs run independently:
+## Project contents
 
-- Backend: Java 25, Maven Wrapper `clean verify`, and PostgreSQL integration tests
-  using Testcontainers on the runner's Docker daemon.
-- Frontend: Node.js 24, `npm ci`, lint, and a production build.
+- `backend/ops-flow-backend`: Spring Boot 4.1.2, Java 25, Maven Wrapper, Spring MVC, Spring Security, JPA, Flyway, and PostgreSQL.
+- `frontend/ops-flow-ui`: React 19 and Vite 8 starter application. Login and management screens are not implemented yet.
+- `compose.yaml`: Nginx frontend, backend, and PostgreSQL 17 with a persistent volume. Nginx forwards `/api/` to the backend.
+- `.github/workflows/ci.yml`: independent backend verification and frontend lint/build jobs using Java 25 and Node 24.
 
-Maven and npm dependencies are cached. Test reports (including failed test results),
-the backend JAR, and the frontend build are available as workflow artifacts for seven
-days. No repository secrets are required. Commit and push the workflow to run it on GitHub.
+Backend packages are grouped by feature, with `api`, `application`, `domain`, and `infrastructure/persistence` layers. Auth also has `security`. HTTP APIs exist for authentication, organizations, and users. Team, incident, and audit packages currently contain domain models.
 
-## Run with Docker Compose
+## Local setup
 
-Install Docker with Compose support and start Docker Desktop (using Linux containers).
-From the repository root, run:
+Requirements: Java 25 or newer, Node 24 for frontend work, and Docker running Linux containers for PostgreSQL and integration tests.
+
+Copy `.env.example` to `.env`. Generate an RSA key pair once, from the repository root (PowerShell 7):
+
+```powershell
+$keyFolder = Join-Path (Get-Location) 'secrets'
+New-Item -ItemType Directory -Force -Path $keyFolder | Out-Null
+if ((Test-Path "$keyFolder/jwt-private.pem") -or (Test-Path "$keyFolder/jwt-public.pem")) {
+    throw 'Key files already exist; do not overwrite the active signing key.'
+}
+$rsa = [System.Security.Cryptography.RSA]::Create(3072)
+try {
+    [System.IO.File]::WriteAllText("$keyFolder/jwt-private.pem", $rsa.ExportPkcs8PrivateKeyPem())
+    [System.IO.File]::WriteAllText("$keyFolder/jwt-public.pem", $rsa.ExportSubjectPublicKeyInfoPem())
+} finally {
+    $rsa.Dispose()
+}
+```
+
+The private key must be an unencrypted PKCS#8 PEM (`BEGIN PRIVATE KEY`); the public key must be X.509 PEM (`BEGIN PUBLIC KEY`). Use RSA keys of at least 2048 bits. Startup fails for unreadable, malformed, weak, or mismatched keys. Keep the private key restricted to the backend. `secrets/` and PEM files are ignored by Git; never commit a deployment private key.
+
+Compose reads `.env` automatically and mounts `AUTH_JWT_KEY_DIR` (default `./secrets`) read-only at `/run/secrets/jwt`. The files must be named `jwt-public.pem` and `jwt-private.pem`, and readable by the container's `app` user. Key files are not bundled into the application image. Direct Maven runs require environment variables to be exported into the shell; Spring Boot does not automatically load the root `.env`.
+
+Start the stack from the repository root:
 
 ```sh
 docker compose up --build -d
 ```
 
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8080
-- PostgreSQL: available internally at `db:5432`; data persists in a named volume.
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:8080`
+- PostgreSQL: internal to Compose at `db:5432`; data persists in a named volume.
 
-Compose uses local development defaults. To customize ports or database credentials,
-copy `.env.example` to `.env` and edit it before the first start. Use a strong password
-for any shared deployment. Changing credentials after database initialization also
-requires updating the existing database credentials.
-
-The frontend is built with Node 24 and served by Nginx with React route fallback.
-Requests to `/api/` are forwarded to the backend with the path preserved. The backend
-is built with Maven and Java 25, then runs as a non-root user.
-
-The backend currently includes Spring Security's default authentication. Its generated
-development password appears in `docker compose logs backend`. API requests require
-authentication; POST and PUT requests also require a CSRF token under the current
-default security configuration.
+Ports and database credentials can be changed through `.env`. Changing credentials after database initialization also requires updating the existing database. Compose builds the frontend with Node 24 and serves it through Nginx with React route fallback. The backend image uses Java 25 and runs as a non-root user.
 
 ```sh
 docker compose logs -f
 docker compose down
 ```
 
-`docker compose down` retains database data. To intentionally delete it, use
-`docker compose down --volumes`.
+Stopping Compose retains the database volume. `docker compose down --volumes` deletes its data.
 
-## Backend module structure
+For frontend development, run from `frontend/ops-flow-ui`:
 
-Backend features use packages grouped by module, with these layers inside each module:
+```sh
+npm ci
+npm run dev
+npm run lint
+npm run build
+```
 
-- `domain`: entities and domain enums.
-- `application`: services, business rules, and mappers.
-- `infrastructure/persistence`: Spring Data repositories.
-- `api`: REST controllers, with DTOs in `request` and `response` subpackages.
+For a direct backend run, set absolute key resource URLs before changing directories (PowerShell, from the repository root):
 
-The Organization module follows this structure. Use the same layout when implementing
-the remaining modules. This is a layered arrangement; application services currently
-use API DTOs and Spring Data repositories directly.
+```powershell
+$env:AUTH_JWT_PUBLIC_KEY = ([System.Uri](Join-Path (Get-Location) 'secrets/jwt-public.pem')).AbsoluteUri
+$env:AUTH_JWT_PRIVATE_KEY = ([System.Uri](Join-Path (Get-Location) 'secrets/jwt-private.pem')).AbsoluteUri
+```
+
+Provide a reachable PostgreSQL database and export `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. The default URL is `jdbc:postgresql://localhost:5432/ops_flow`. Then run from `backend/ops-flow-backend`:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+On Linux/macOS, use `./mvnw`. Flyway applies migrations at startup; Hibernate validates the resulting schema.
+
+## Authentication API
+
+Auth uses stateless bearer JWTs and opaque refresh tokens submitted explicitly as JSON. It does not use browser cookies, HTTP sessions, HTTP Basic, or form login. There is no CSRF endpoint; CSRF is disabled for this token-based API.
+
+| Method | Endpoint | Request / result |
+| --- | --- | --- |
+| POST | `/api/auth/login` | `{email, password}`; returns `AuthResponse` |
+| POST | `/api/auth/refresh` | `{refreshToken}`; returns a new `AuthResponse` and consumes the old refresh token |
+| POST | `/api/auth/logout` | `{refreshToken}`; revokes that token and returns 204; unknown/already revoked tokens are safe to repeat |
+| POST | `/api/auth/logout-all` | Requires bearer JWT; revokes all of that user's refresh tokens and returns 204 |
+| GET | `/api/auth/me` | Requires bearer JWT; returns `userId`, `organizationId`, and `authorities` |
+
+Login, refresh, and logout are public POST endpoints. GET `/actuator/health` is public. All remaining requests require authentication. The organization and user APIs currently require authentication only; tenant scoping and administrator-only endpoint policies are not implemented.
+
+`AuthResponse` contains:
+
+```json
+{
+  "accessToken": "<signed JWT>",
+  "refreshToken": "<opaque token>",
+  "tokenType": "Bearer",
+  "expiresIn": 600
+}
+```
+
+`expiresIn` is the configured access-token lifetime in seconds. Token responses use `Cache-Control: no-store`. Login validates email/password input, finds emails case-insensitively, verifies the existing BCrypt password hash, and updates `lastLoginAt`. Users must be ACTIVE and belong to an ACTIVE organization to log in or refresh.
+
+Access tokens use RS256 (private-key signing, public-key verification) and carry `iss`, `aud`, `sub` (user UUID), `iat`, `exp`, `jti`, `org_id`, `token_type=access`, and `authorities`. Validation checks signature, issuer, audience, timestamps, token type, and required identity claims. Roles belonging to the user's organization become `ROLE_<code>` authorities; their permissions become `PERM_<code>`. `ROLE_PLATFORM_ADMIN` is emitted only for a system role with that code.
+
+Access-token validation is stateless. Logout, logout-all, account status changes, and role changes do not invalidate an issued access token; it remains valid until expiry. Login and refresh reload current user information. No session table or access-token denylist is implemented.
+
+Refresh tokens contain 64 cryptographically random bytes encoded as URL-safe Base64. Only SHA-256 hashes are stored. Rotation locks the original token row, creates its replacement, revokes the original, and links it through `replaced_by` in one transaction. Replacements retain the original absolute expiration (seven days by default). Replaying a revoked refresh token revokes all outstanding refresh tokens for that user, including other logins. Clients should serialize refresh requests. Consumed hashes must be retained until they are no longer needed for replay detection.
+
+Malformed request bodies return 400. Invalid credentials and invalid/expired/revoked refresh tokens return 401 with a generic Problem Details response. Missing or invalid bearer JWTs return 401 through Spring Security. CORS permits only configured origins. Clients must protect both tokens and explicitly send `Authorization: Bearer <accessToken>` on protected requests.
+
+### Auth configuration
+
+| Environment variable | Default / purpose |
+| --- | --- |
+| `AUTH_JWT_PUBLIC_KEY` | Required for direct runs; `file:` or `classpath:` resource for the X.509 PEM public key |
+| `AUTH_JWT_PRIVATE_KEY` | Required for direct runs; `file:` or `classpath:` resource for the PKCS#8 PEM private key |
+| `AUTH_JWT_KEY_DIR` | Compose only; host directory containing both PEM files (default `./secrets`) |
+| `AUTH_ISSUER` | `https://ops-flow.local` |
+| `AUTH_AUDIENCE` | `ops-flow-api` |
+| `AUTH_ACCESS_TTL` | `PT10M` |
+| `AUTH_REFRESH_TTL` | `P7D` |
+| `AUTH_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` |
+
+TTL values use ISO-8601 durations and must be at least one second. Backend instances that issue tokens need the same RSA key pair and database. Services that only verify JWTs need only the public key. Replacing the key pair invalidates existing access tokens. `AUTH_JWT_SECRET` is no longer used. `AUTH_COOKIE_SECURE` is unused because auth does not use cookies.
+
+### Initial administrator
+
+`auth.application.BootstrapAdmin` is an opt-in startup runner. To provision the first account, set these values in `.env` for Compose, or export them for a direct backend run:
+
+```dotenv
+AUTH_BOOTSTRAP_ENABLED=true
+AUTH_BOOTSTRAP_EMAIL=admin@example.com
+AUTH_BOOTSTRAP_PASSWORD=<choose-a-unique-password>
+```
+
+The password must contain at least 12 characters and fit within BCrypt's 72 UTF-8 byte limit. The email is validated, trimmed, and lowercased. No default credentials are supplied.
+
+When the users table is empty, bootstrap creates an ACTIVE organization, an ACTIVE user with a BCrypt password hash, and a system `PLATFORM_ADMIN` role assigned to that user. It creates all records in one transaction and serializes provisioning across backend instances. If any user already exists, bootstrap skips provisioning and never changes their password or roles. Invalid configuration on an empty users table fails startup without creating records.
+
+After the first successful startup, set `AUTH_BOOTSTRAP_ENABLED=false`, remove the bootstrap password, and restart the backend. Bootstrap is disabled by default. It is intended for initial setup; there is no public registration or role-assignment endpoint. The existing HTTP endpoint policies still require authentication only; creating a system role does not add administrator-only endpoint restrictions.
+
+Example, once the backend is running and a user exists:
+
+```sh
+curl -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"<password>"}' \
+  http://localhost:8080/api/auth/login
+
+curl -H 'Authorization: Bearer <access-token>' \
+  http://localhost:8080/api/auth/me
+
+curl -H 'Content-Type: application/json' \
+  -d '{"refreshToken":"<refresh-token>"}' \
+  http://localhost:8080/api/auth/refresh
+
+curl -H 'Content-Type: application/json' \
+  -d '{"refreshToken":"<latest-refresh-token>"}' \
+  http://localhost:8080/api/auth/logout
+```
 
 ## Organization API
-
-The backend persists organizations in PostgreSQL and runs Flyway migrations at startup.
 
 | Method | Endpoint | Behavior |
 | --- | --- | --- |
 | POST | `/api/organizations` | Create an ACTIVE organization; returns 201 and a Location header |
-| GET | `/api/organizations/{id}` | Read an organization by UUID |
-| GET | `/api/organizations?page=0&size=20` | List organizations ordered by creation time and ID |
+| GET | `/api/organizations/{id}` | Read by UUID |
+| GET | `/api/organizations?page=0&size=20` | List ordered by creation time and ID |
 | PUT | `/api/organizations/{id}` | Replace name, slug, and status |
 
-Create request:
+Create: `{"name":"Ops Flow","slug":"ops-flow"}`.
+Update: `{"name":"Ops Flow","slug":"ops-flow","status":"SUSPENDED"}`.
 
-```json
-{"name":"Ops Flow","slug":"ops-flow"}
-```
+Names/slugs are trimmed. Names are required and limited to 150 characters. Slugs are unique, limited to 100 characters, and use lowercase letters/digits separated by single hyphens. Status accepts ACTIVE, SUSPENDED, or DISABLED. Page starts at zero; size is 1–100. Responses include IDs, fields, and audit timestamps; lists contain `content` and `page` metadata. Invalid inputs return 400, missing records 404, and conflicts 409.
 
-Update request:
+## User API
 
-```json
-{"name":"Ops Flow","slug":"ops-flow","status":"SUSPENDED"}
-```
+The user controller provides POST and GET `/api/users`, plus GET and PUT `/api/users/{id}`. Creation accepts `organizationId`, `firstName`, `lastName`, `email`, and `password`. Updates accept the same identity fields plus `status`, without a password. User statuses are ACTIVE, DISABLED, LOCKED, and PENDING. Emails are normalized and checked case-insensitively for duplicates. Passwords are hashed with BCrypt.
 
-Names and slugs are trimmed before validation. Names are required and limited to 150
-characters. Slugs are required, unique, limited to 100 characters, and accept lowercase
-letters and digits with single separating hyphens. Update status is required and accepts
-`ACTIVE`, `SUSPENDED`, or `DISABLED`. Page starts at zero; size must be between 1 and 100.
-Responses include `id`, `name`, `slug`, `status`, `createdAt`, and `updatedAt`.
-List responses include `content` and a `page` object with `size`, `number`,
-`totalElements`, and `totalPages`.
+## Verification and CI
 
-Errors use Problem Details JSON: invalid input returns 400 (with an `errors` field for
-body validation), missing organizations return 404, and duplicate slugs return 409.
-
-## Backend integration tests
-
-With Java 25+ and Docker running, execute from `backend/ops-flow-backend`:
+From `backend/ops-flow-backend`, run:
 
 ```powershell
 .\mvnw.cmd clean verify
 ```
 
-On Linux or macOS, use `./mvnw clean verify`. Failsafe runs `OrganizationIntegrationIT`
-against an isolated PostgreSQL 17 Testcontainers database with all Flyway migrations
-and Hibernate schema validation enabled. Tests cover persistence, pagination, updates,
-validation, conflicts, missing records, malformed requests, authentication, and CSRF.
-The application context smoke test is included in this integration suite. `package`
-builds the application; `verify` also executes the integration suite and requires Docker.
+Maven runs unit tests with Surefire and `*IT` integration tests with Failsafe. Integration tests require Docker and use PostgreSQL 17 with Flyway migrations and Hibernate schema validation.
+
+The latest full verification passes the auth/bootstrap tests but still reports three failures in the existing user/organization tests: two expect CSRF protection for writes, and one expects the previous password-hash format. Those assertions need to be aligned with the current stateless JSON-token API and BCrypt configuration.
+
+`AuthIntegrationIT` defines an auth-specific application context and covers JSON login/refresh/logout, concurrent rotation, replay revocation, inactive accounts, expiry, JWT validation, CORS, and request validation. `JwtConfigTest` checks RSA PEM loading, key size and pairing, public-key verification, RS256 enforcement, and lifetime configuration. Bootstrap tests cover startup provisioning, login, the system administrator role, repeat/concurrent invocations, and credential validation. Organization and user integration tests remain in their respective packages.
+
+CI runs on pushes, pull requests, and manual dispatch. The backend job runs `clean verify`; the frontend job runs `npm ci`, lint, and production build. Reports and build artifacts are retained for seven days.

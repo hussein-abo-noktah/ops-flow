@@ -1,4 +1,5 @@
 package com.husseinabonoktah.opsflowbackend.shared;
+import com.husseinabonoktah.opsflowbackend.auth.security.TestRsaKeys;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -11,7 +12,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@WithMockUser
+@WithMockUser(roles = "PLATFORM_ADMIN")
 public abstract class BaseIntegrationTest {
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
 
@@ -21,6 +22,8 @@ public abstract class BaseIntegrationTest {
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry registry) {
+        TestRsaKeys.register(registry);
+        registry.add("app.security.cookie-secure", () -> "false");
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);

@@ -19,6 +19,8 @@ target/
 *.class
 
 # Local environment and secrets
+secrets/
+*.pem
 .env
 .env.*
 !.env.example

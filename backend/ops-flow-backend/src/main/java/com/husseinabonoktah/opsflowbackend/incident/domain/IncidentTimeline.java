@@ -3,10 +3,13 @@ package com.husseinabonoktah.opsflowbackend.incident.domain;
 import com.husseinabonoktah.opsflowbackend.user.domain.User;
 import com.husseinabonoktah.opsflowbackend.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
+
 import java.time.Instant;
 
 
 @Entity
+@Getter
 @Table(name = "incident_timeline")
 public class IncidentTimeline extends BaseEntity {
 
@@ -31,16 +34,13 @@ public class IncidentTimeline extends BaseEntity {
     @Column(columnDefinition = "jsonb")
     private String metadata;
 
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = Instant.now();
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
     }
 
     protected IncidentTimeline() {
