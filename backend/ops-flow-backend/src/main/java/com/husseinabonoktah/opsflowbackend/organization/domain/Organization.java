@@ -2,10 +2,14 @@ package com.husseinabonoktah.opsflowbackend.organization.domain;
 
 import com.husseinabonoktah.opsflowbackend.shared.persistence.AuditableEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 
 
 @Entity
+@Getter
+@Setter
 @Table(name = "organizations")
 public class Organization extends AuditableEntity {
 
@@ -16,7 +20,7 @@ public class Organization extends AuditableEntity {
     private String slug;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 30)
     private OrganizationStatus status;
 
 }
