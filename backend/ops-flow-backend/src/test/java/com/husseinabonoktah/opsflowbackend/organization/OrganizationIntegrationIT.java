@@ -1,21 +1,13 @@
 package com.husseinabonoktah.opsflowbackend.organization;
 
 import com.husseinabonoktah.opsflowbackend.organization.infrastructure.persistence.OrganizationRepository;
+import com.husseinabonoktah.opsflowbackend.shared.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.util.UUID;
 
@@ -24,24 +16,9 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@Testcontainers
-@WithMockUser
-class OrganizationIntegrationIT {
+class OrganizationIntegrationIT extends BaseIntegrationTest {
     private static final String URL = "/api/organizations";
 
-    @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
-
-    @DynamicPropertySource
-    static void database(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-    }
-
-    @Autowired MockMvc mvc;
     @Autowired OrganizationRepository repository;
 
     @BeforeEach

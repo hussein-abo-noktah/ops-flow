@@ -4,12 +4,16 @@ import com.husseinabonoktah.opsflowbackend.auth.domain.Role;
 import com.husseinabonoktah.opsflowbackend.organization.domain.Organization;
 import com.husseinabonoktah.opsflowbackend.shared.persistence.AuditableEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 
 @Entity
+@Getter
+@Setter
 @Table(name = "users")
 public class User extends AuditableEntity {
 
@@ -45,6 +49,6 @@ public class User extends AuditableEntity {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<Role> roles = new HashSet<>();
-    protected User() {
+    public User() {
     }
 }
