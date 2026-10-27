@@ -1,6 +1,19 @@
 # ops-flow
 Operation Management Platform
 
+## Continuous integration
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs on pushes, pull
+requests, and manual dispatches. Two jobs run independently:
+
+- Backend: Java 25, Maven Wrapper `clean verify`, and PostgreSQL integration tests
+  using Testcontainers on the runner's Docker daemon.
+- Frontend: Node.js 24, `npm ci`, lint, and a production build.
+
+Maven and npm dependencies are cached. Test reports (including failed test results),
+the backend JAR, and the frontend build are available as workflow artifacts for seven
+days. No repository secrets are required. Commit and push the workflow to run it on GitHub.
+
 ## Run with Docker Compose
 
 Install Docker with Compose support and start Docker Desktop (using Linux containers).
