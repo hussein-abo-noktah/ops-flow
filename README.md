@@ -106,7 +106,7 @@ Login, refresh, and logout are public POST endpoints. GET `/actuator/health` is 
 
 `expiresIn` is the configured access-token lifetime in seconds. Token responses use `Cache-Control: no-store`. Login validates email/password input, finds emails case-insensitively, verifies the existing BCrypt password hash, and updates `lastLoginAt`. Users must be ACTIVE and belong to an ACTIVE organization to log in or refresh.
 
-Access tokens use RS256 (private-key signing, public-key verification) and carry `iss`, `aud`, `sub` (user UUID), `iat`, `exp`, `jti`, `org_id`, `token_type=access`, and `authorities`. Validation checks signature, issuer, audience, timestamps, token type, and required identity claims. Roles belonging to the user's organization become `ROLE_<code>` authorities; their permissions become `PERM_<code>`. `ROLE_PLATFORM_ADMIN` is emitted only for a system role with that code.
+Access tokens use RS256 (private-key signing, public-key verification) and carry `iss`, `aud`, `sub` (user UUID), `iat`, `exp`, `jti`, `org_id`, `token_type=access`, and `authorities`. Validation checks signature, issuer, audience, timestamps, token type, and required identity claims. Roles belonging to the user's organization become `ROLE_<code>` authorities; their permission codes are included directly, such as `team:update`. `ROLE_PLATFORM_ADMIN` is emitted only for a system role with that code.
 
 Access-token validation is stateless. Logout, logout-all, account status changes, and role changes do not invalidate an issued access token; it remains valid until expiry. Login and refresh reload current user information. No session table or access-token denylist is implemented.
 
@@ -184,7 +184,9 @@ The user controller provides POST and GET `/api/users`, plus GET and PUT `/api/u
 
 ## Team API
 
-Team operations use the authenticated JWT's org_id; requests do not accept an organization ID. Teams belonging to another tenant return 404, including for platform administrators. Reads require authentication. Creation requires team:create; updates and membership changes require team:update. ROLE_PLATFORM_ADMIN can perform these writes within its own tenant.
+All permission codes use lowercase resource:action names, such as incident:create, incident:view, user:manage, team:update, and audit:view. This convention applies to permission definitions, database seed data, JWT authorities, and controller checks. Role authorities retain their ROLE_ prefix.
+
+Team operations use the authenticated JWT's org_id; requests do not accept an organization ID. Teams belonging to another tenant return 404, including for platform administrators. Reads require authentication. Creation requires team:create; updates and membership changes require team:update. ROLE_PLATFORM_ADMIN can perform these writes within its own tenant. Permission codes use the same format in storage, JWT authorities, and controller checks.
 
 | Method | Endpoint | Behavior |
 | --- | --- | --- |

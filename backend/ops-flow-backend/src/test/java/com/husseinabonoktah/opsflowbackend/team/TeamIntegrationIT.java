@@ -186,6 +186,12 @@ class TeamIntegrationIT extends BaseIntegrationTest {
     void requiresWritePermissionsAndAuthentication() throws Exception {
         Team team = team(organization, "OPS");
         String path = URL + "/" + team.getId();
+        mvc.perform(post(URL).with(tenant("PERM_team:create")).contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"name":"Ops","code":"PREFIXED"}
+                        """)).andExpect(status().isForbidden());
+        mvc.perform(delete(path + "/members/" + UUID.randomUUID()).with(tenant("PERM_team:update")))
+                .andExpect(status().isForbidden());
         mvc.perform(post(URL).with(tenant()).contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"name":"Ops","code":"NEW"}

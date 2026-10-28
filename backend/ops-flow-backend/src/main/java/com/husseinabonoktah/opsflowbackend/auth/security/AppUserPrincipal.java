@@ -39,15 +39,18 @@ public class AppUserPrincipal implements UserDetails {
         this.status = user.getStatus();
         this.organizationActive = user.getOrganization().getStatus() == OrganizationStatus.ACTIVE;
 
+        var organizationRoles = user.getRoles().stream()
+                .filter(role -> organizationId.equals(role.getOrganization().getId()))
+                .toList();
+
         this.roles =
-                user.getRoles()
-                        .stream()
+                organizationRoles.stream()
+                        .filter(role -> !"PLATFORM_ADMIN".equals(role.getCode()) || role.isSystem())
                         .map(Role::getCode)
                         .collect(Collectors.toSet());
 
         this.permissions =
-                user.getRoles()
-                        .stream()
+                organizationRoles.stream()
                         .flatMap(role ->
                                 role.getPermissions().stream()
                         )
