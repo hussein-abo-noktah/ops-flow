@@ -27,11 +27,11 @@ public class AppUserDetailsService
     public UserDetails loadUserByUsername(
             @NonNull
             String username
-    ) throws UsernameNotFoundException {
+    ) {
 
         User user =
                 userRepository
-                        .findByEmailIgnoreCase(username)
+                        .findByEmailWithAuthorities(username)
                         .orElseThrow(() ->
                                 new UsernameNotFoundException(
                                         "User not found"

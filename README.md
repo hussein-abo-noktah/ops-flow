@@ -9,7 +9,7 @@ Operation Management Platform, currently under development.
 - `compose.yaml`: Nginx frontend, backend, and PostgreSQL 17 with a persistent volume. Nginx forwards `/api/` to the backend.
 - `.github/workflows/ci.yml`: independent backend verification and frontend lint/build jobs using Java 25 and Node 24.
 
-Backend packages are grouped by feature, with `api`, `application`, `domain`, and `infrastructure/persistence` layers. Auth also has `security`. HTTP APIs exist for authentication, organizations, and users. Team, incident, and audit packages currently contain domain models.
+Backend packages are grouped by feature, with `api`, `application`, `domain`, and `infrastructure/persistence` layers. Auth also has `security`. HTTP APIs exist for authentication, organizations, users, teams, and team membership. Incident and audit packages currently contain domain models.
 
 ## Local setup
 
@@ -181,6 +181,36 @@ Names/slugs are trimmed. Names are required and limited to 150 characters. Slugs
 ## User API
 
 The user controller provides POST and GET `/api/users`, plus GET and PUT `/api/users/{id}`. Creation accepts `organizationId`, `firstName`, `lastName`, `email`, and `password`. Updates accept the same identity fields plus `status`, without a password. User statuses are ACTIVE, DISABLED, LOCKED, and PENDING. Emails are normalized and checked case-insensitively for duplicates. Passwords are hashed with BCrypt.
+
+## Team API
+
+Team operations use the authenticated JWT's org_id; requests do not accept an organization ID. Teams belonging to another tenant return 404, including for platform administrators. Reads require authentication. Creation requires team:create; updates and membership changes require team:update. ROLE_PLATFORM_ADMIN can perform these writes within its own tenant.
+
+| Method | Endpoint | Behavior |
+| --- | --- | --- |
+| POST | /api/teams | Create an ACTIVE team; returns 201 |
+| GET | /api/teams/{id} | Read a team within the current tenant |
+| GET | /api/teams?page=0&size=20 | Paginated teams within the current tenant |
+| PUT | /api/teams/{id} | Update name, code, description, and status |
+| POST | /api/teams/{teamId}/members | Add a user; returns 201 |
+| GET | /api/teams/{teamId}/members?page=0&size=20 | Paginated members |
+| DELETE | /api/teams/{teamId}/members/{userId} | Remove membership; returns 204 |
+
+Create team:
+
+    {"name":"Operations","code":"OPS","description":"Support team"}
+
+Update team:
+
+    {"name":"Operations","code":"OPS","description":"Support team","status":"DISABLED"}
+
+Add member (primary defaults to false):
+
+    {"userId":"<UUID>","primary":true}
+
+Names and codes are trimmed and limited to 150 and 50 characters; descriptions are trimmed and limited to 1000 characters. Codes are uppercased and unique case-insensitively within each tenant. Team status accepts ACTIVE or DISABLED. A user can join several teams in their tenant, but only once per team and with at most one primary team. Adding a member requires an ACTIVE user and an ACTIVE team. Removing a primary membership frees that primary slot; disabling a team preserves its memberships. The membership DELETE path uses the user's UUID. Membership responses include the membership ID, team/user IDs, user names/email, primary flag, and join time.
+
+Invalid input returns 400, missing or foreign resources 404, insufficient permissions 403, and duplicate or inactive membership conflicts 409. Pagination uses zero-based pages and sizes of 1–100. Database constraints and row locks protect membership rules under concurrent requests. Migration V13 adds case-insensitive team code uniqueness and one primary membership per user; existing conflicting data must be resolved before applying it.
 
 ## Verification and CI
 

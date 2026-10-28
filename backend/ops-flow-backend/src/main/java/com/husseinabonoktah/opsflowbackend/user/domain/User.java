@@ -51,4 +51,5 @@ public class User extends AuditableEntity {
     private Set<Role> roles = new HashSet<>();
     public User() {
     }
+
 }

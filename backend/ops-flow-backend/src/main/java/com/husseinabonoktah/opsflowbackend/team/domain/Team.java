@@ -2,9 +2,13 @@ package com.husseinabonoktah.opsflowbackend.team.domain;
 import com.husseinabonoktah.opsflowbackend.organization.domain.Organization;
 import com.husseinabonoktah.opsflowbackend.shared.persistence.AuditableEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 
 @Entity
+@Getter
+@Setter
 @Table(
         name = "teams",
         uniqueConstraints = {
@@ -34,6 +38,6 @@ public class Team extends AuditableEntity {
     private TeamStatus status;
 
 
-    protected Team() {
+    public Team() {
     }
 }

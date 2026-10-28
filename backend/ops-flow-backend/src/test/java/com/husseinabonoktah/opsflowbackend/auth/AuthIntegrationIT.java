@@ -14,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.*;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
@@ -39,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = AuthIntegrationIT.AuthTestApplication.class)
 @AutoConfigureMockMvc
 class AuthIntegrationIT {
-    @TestConfiguration(proxyBeanMethods = false)
+    @Configuration(proxyBeanMethods = false)
     @EnableAutoConfiguration
     @EntityScan("com.husseinabonoktah.opsflowbackend")
     @EnableJpaRepositories(basePackages = {
