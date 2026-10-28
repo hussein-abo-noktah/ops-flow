@@ -3,10 +3,14 @@ package com.husseinabonoktah.opsflowbackend.team.domain;
 import com.husseinabonoktah.opsflowbackend.user.domain.User;
 import com.husseinabonoktah.opsflowbackend.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.Instant;
 
 @Entity
+@Getter
+@Setter
 @Table(
         name = "team_members",
         uniqueConstraints = {
@@ -32,6 +36,6 @@ public class TeamMember extends BaseEntity {
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt;
 
-    protected TeamMember() {
+    public TeamMember() {
     }
 }

@@ -14,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.*;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
@@ -39,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = AuthIntegrationIT.AuthTestApplication.class)
 @AutoConfigureMockMvc
 class AuthIntegrationIT {
-    @TestConfiguration(proxyBeanMethods = false)
+    @Configuration(proxyBeanMethods = false)
     @EnableAutoConfiguration
     @EntityScan("com.husseinabonoktah.opsflowbackend")
     @EnableJpaRepositories(basePackages = {
@@ -221,19 +220,30 @@ class AuthIntegrationIT {
         UUID local = UUID.randomUUID();
         UUID foreign = UUID.randomUUID();
         UUID otherOrg = UUID.randomUUID();
-        UUID permission = UUID.randomUUID();
+        UUID permission = jdbc.queryForObject("SELECT id FROM permissions WHERE code = ?", UUID.class, Permissions.INCIDENT_VIEW);
+        UUID foreignPermission = UUID.randomUUID();
+        UUID responder = UUID.randomUUID();
         jdbc.update("INSERT INTO organizations(id,name,slug,status,created_at,updated_at) VALUES (?,'Other','other','ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", otherOrg);
         jdbc.update("INSERT INTO roles(id,organization_id,name,code,is_system,created_at,updated_at) VALUES (?,?,'Admin','PLATFORM_ADMIN',false,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", local, user.getOrganization().getId());
         jdbc.update("INSERT INTO roles(id,organization_id,name,code,is_system,created_at,updated_at) VALUES (?,?,'Foreign','FOREIGN',true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", foreign, otherOrg);
-        jdbc.update("INSERT INTO permissions(id,code) VALUES (?,'INCIDENT_READ')", permission);
+        jdbc.update("INSERT INTO permissions(id,code) VALUES (?,'foreign:view')", foreignPermission);
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_id) VALUES (?,?)", foreign, foreignPermission);
+        jdbc.update("INSERT INTO roles(id,organization_id,name,code,is_system,created_at,updated_at) VALUES (?,?,'Responder','RESPONDER',false,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", responder, user.getOrganization().getId());
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_id) VALUES (?,?)", responder, permission);
+        jdbc.update("INSERT INTO user_roles(user_id,role_id) VALUES (?,?)", user.getId(), responder);
         jdbc.update("INSERT INTO role_permissions(role_id,permission_id) VALUES (?,?)", local, permission);
         jdbc.update("INSERT INTO user_roles(user_id,role_id) VALUES (?,?),(?,?)", user.getId(), local, user.getId(), foreign);
-        var ordinary = decoder.decode(field(login(200), "accessToken"));
-        assertThat(ordinary.getClaimAsStringList("authorities")).containsExactly("PERM_INCIDENT_READ");
+        var ordinaryLogin = login(200);
+        var ordinary = decoder.decode(field(ordinaryLogin, "accessToken"));
+        assertThat(ordinary.getClaimAsStringList("authorities"))
+                .containsExactlyInAnyOrder("ROLE_RESPONDER", "incident:view");
         jdbc.update("UPDATE roles SET is_system=true WHERE id=?", local);
         var admin = login(200);
         assertThat(decoder.decode(field(admin, "accessToken")).getClaimAsStringList("authorities"))
-                .containsExactlyInAnyOrder("ROLE_PLATFORM_ADMIN", "PERM_INCIDENT_READ");
+                .containsExactlyInAnyOrder("ROLE_PLATFORM_ADMIN", "ROLE_RESPONDER", "incident:view");
+        var refreshed = tokenRequest("refresh", field(ordinaryLogin, "refreshToken"), 200);
+        assertThat(decoder.decode(field(refreshed, "accessToken")).getClaimAsStringList("authorities"))
+                .containsExactlyInAnyOrder("ROLE_PLATFORM_ADMIN", "ROLE_RESPONDER", "incident:view");
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + field(admin, "accessToken")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.authorities").isArray());
     }
