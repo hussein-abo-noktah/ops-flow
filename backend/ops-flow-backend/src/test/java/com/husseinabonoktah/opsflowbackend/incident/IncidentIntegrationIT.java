@@ -54,6 +54,7 @@ class IncidentIntegrationIT extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.status").value("OPEN"))
                 .andExpect(jsonPath("$.createdBy").value(actor.getId().toString()));
         Incident incident = incidents.findAllByOrganizationId(organization.getId(), Pageable.unpaged()).getContent().getFirst();
+        assertThat(incident.getTitle()).isEqualTo("Outage");
         String path = URL + "/" + incident.getId();
         String[] steps = {"acknowledge", "start-investigation", "mitigate", "resolve", "close"};
         for (int i = 0; i < steps.length; i++) {
