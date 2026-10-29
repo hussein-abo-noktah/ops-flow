@@ -84,7 +84,12 @@ class AuthIntegrationIT {
 
     @BeforeEach
     void setup() {
-        jdbc.execute("TRUNCATE organizations CASCADE");
+        jdbc.update("DELETE FROM refresh_tokens");
+        jdbc.update("DELETE FROM user_roles");
+        jdbc.update("DELETE FROM role_permissions");
+        jdbc.update("DELETE FROM roles");
+        jdbc.update("DELETE FROM users");
+        jdbc.update("DELETE FROM organizations");
         var org = new Organization();
         org.setName("Auth tests");
         org.setSlug("auth-tests");

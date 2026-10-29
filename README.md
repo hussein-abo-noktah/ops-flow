@@ -9,7 +9,7 @@ Operation Management Platform, currently under development.
 - `compose.yaml`: Nginx frontend, backend, and PostgreSQL 17 with a persistent volume. Nginx forwards `/api/` to the backend.
 - `.github/workflows/ci.yml`: independent backend verification and frontend lint/build jobs using Java 25 and Node 24.
 
-Backend packages are grouped by feature, with `api`, `application`, `domain`, and `infrastructure/persistence` layers. Auth also has `security`. HTTP APIs exist for authentication, organizations, users, teams, and team membership. Incident and audit packages currently contain domain models.
+Backend packages are grouped by feature, with `api`, `application`, `domain`, and `infrastructure/persistence` layers. Auth also has `security`. HTTP APIs exist for authentication, organizations, users, teams, team membership, and incidents. The audit package currently contains its domain model.
 
 ## Local setup
 
@@ -213,6 +213,100 @@ Add member (primary defaults to false):
 Names and codes are trimmed and limited to 150 and 50 characters; descriptions are trimmed and limited to 1000 characters. Codes are uppercased and unique case-insensitively within each tenant. Team status accepts ACTIVE or DISABLED. A user can join several teams in their tenant, but only once per team and with at most one primary team. Adding a member requires an ACTIVE user and an ACTIVE team. Removing a primary membership frees that primary slot; disabling a team preserves its memberships. The membership DELETE path uses the user's UUID. Membership responses include the membership ID, team/user IDs, user names/email, primary flag, and join time.
 
 Invalid input returns 400, missing or foreign resources 404, insufficient permissions 403, and duplicate or inactive membership conflicts 409. Pagination uses zero-based pages and sizes of 1–100. Database constraints and row locks protect membership rules under concurrent requests. Migration V13 adds case-insensitive team code uniqueness and one primary membership per user; existing conflicting data must be resolved before applying it.
+
+## Incident API and workflow
+
+Incidents follow this domain-enforced sequence:
+
+`OPEN → ACKNOWLEDGED → INVESTIGATING → MITIGATED → RESOLVED → CLOSED`
+
+Each command permits only the next transition. Skipping, repeating, or reversing transitions returns 409. There is no status setter or generic status-change endpoint. Updates accept title and description only; severity and assignment have separate commands. CLOSED incidents reject edits, severity changes, and assignment changes.
+
+All operations use the JWT's org_id, including for PLATFORM_ADMIN. Foreign or missing resources return 404. Every endpoint requires its permission or ROLE_PLATFORM_ADMIN within the current tenant.
+
+| Method | Endpoint | Permission / behavior |
+| --- | --- | --- |
+| POST | `/api/incidents` | incident:create; opens an incident, returns 201 and Location |
+| GET | `/api/incidents/{id}` | incident:view |
+| GET | `/api/incidents?page=0&size=20` | incident:view; paginated tenant incidents |
+| PUT | `/api/incidents/{id}` | incident:update; replaces title and description |
+| POST | `/api/incidents/{id}/assign` | incident:assign; replaces team/user assignment |
+| POST | `/api/incidents/{id}/severity` | incident:update |
+| POST | `/api/incidents/{id}/acknowledge` | incident:update; OPEN → ACKNOWLEDGED |
+| POST | `/api/incidents/{id}/start-investigation` | incident:update; ACKNOWLEDGED → INVESTIGATING |
+| POST | `/api/incidents/{id}/mitigate` | incident:update; INVESTIGATING → MITIGATED |
+| POST | `/api/incidents/{id}/resolve` | incident:resolve; MITIGATED → RESOLVED |
+| POST | `/api/incidents/{id}/close` | incident:resolve; RESOLVED → CLOSED |
+| GET | `/api/incidents/{id}/timeline?page=0&size=20` | incident:view; oldest events first |
+
+Create: `{"title":"API outage","description":"Elevated error rate","severity":"SEV1"}`.
+Update: `{"title":"API outage","description":"Investigation notes"}`.
+Severity: `{"severity":"SEV2"}`. Values are SEV1, SEV2, SEV3, SEV4.
+Assignment: `{"teamId":"<UUID>","userId":"<UUID>"}`; either field may be null, and `{}` clears both. Assignees must be active and belong to the incident's tenant. Assigning a user does not require team membership.
+Workflow commands take no body.
+
+Titles are trimmed, required, and limited to 250 characters; optional descriptions are trimmed and limited to 10,000 characters. Incident numbers are generated as INC- plus a UUID and protected by the existing tenant/number unique constraint. Page starts at zero and size is 1–100.
+
+Creation and successful changes append timeline entries with the actor, timestamp, and old/new values in the same transaction. Detail and assignment values are JSON objects stored as text; status and severity values are enum names. Every transition, including resolution, uses STATUS_CHANGED. Unchanged updates create no event. Acknowledgement, mitigation, resolution, and closure set their corresponding timestamps. Optimistic locking protects concurrent writes; a losing request returns 409 and rolls back its timeline entry. The response includes the current entity version.
+
+Incident tests cover the entire transition matrix, timestamps, closed-state edits, workflow HTTP commands, validation, permissions, tenant isolation, assignments, no-op events, concurrent acknowledgement, and transaction rollback using PostgreSQL.
+
+### Incident search, filtering, and sorting
+
+GET `/api/incidents` combines optional filters with AND through reusable JPA Specifications. The organization predicate always comes from the authenticated JWT and applies to both results and total counts. The response keeps the existing `content` and `page` structure.
+
+| Parameter | Meaning |
+| --- | --- |
+| `q` | Case-insensitive literal substring across title, description, or incident number; trimmed, maximum 250 characters; blank means no text filter |
+| `status` | One of OPEN, ACKNOWLEDGED, INVESTIGATING, MITIGATED, RESOLVED, CLOSED |
+| `severity` | One of SEV1, SEV2, SEV3, SEV4 |
+| `assignedTeamId` / `assignedUserId` | Exact assignee UUID |
+| `createdBy` | Exact creator UUID |
+| `createdFrom` / `createdTo` | Inclusive creation timestamp bounds; ISO 8601 timestamps with a timezone, e.g. 2026-10-01T00:00:00Z |
+| `page` / `size` | Zero-based page (default 0), size 1–100 (default 20) |
+| `sortBy` | id, incidentNumber, title, severity, status, createdAt, updatedAt, acknowledgedAt, mitigatedAt, resolvedAt, closedAt; default createdAt |
+| `direction` | ASC or DESC; default ASC |
+
+Example:
+
+```text
+GET /api/incidents?q=database&status=INVESTIGATING&severity=SEV1&createdFrom=2026-10-01T00:00:00Z&page=0&size=20&sortBy=createdAt&direction=DESC
+```
+
+Text search treats %, _, and backslash as literal characters. Missing filters include unassigned incidents. Unknown or foreign filter UUIDs return an empty result. Invalid enums, UUIDs, timestamps, sort fields, date ranges, or pagination return 400 ProblemDetail. The date range may be open-ended; createdFrom must not exceed createdTo. Page offsets must fit within the database pagination limit.
+
+Sorting appends id ASC to break ties unless id itself is selected. Enum sorting uses stored names (status alphabetically, severity SEV1 through SEV4); nullable timestamp sorts use PostgreSQL's default null ordering. Pagination is stable for unchanged data; concurrent writes can shift offset-based pages. Migration V14 adds an organization/createdAt/id index for the default listing order and creation-date filters.
+
+Search integration tests cover combined and independent filters, tenant isolation with matching foreign data, literal text search, inclusive date bounds, deterministic pagination, sort direction, empty pages, and invalid query parameters on PostgreSQL.
+
+### Incident comments and immutable collaboration history
+
+Comments remain available after incident closure for follow-up discussion. An active user needs incident:update (or ROLE_PLATFORM_ADMIN) to add a comment. Only its author may edit it, including when the caller is a platform administrator. Reads require incident:view or ROLE_PLATFORM_ADMIN. Every endpoint is scoped to the JWT organization and the incident in the URL; foreign or mismatched resources return 404.
+
+| Method | Endpoint | Behavior |
+| --- | --- | --- |
+| POST | /api/incidents/{incidentId}/comments | Add comment; returns 201 and Location |
+| GET | /api/incidents/{incidentId}/comments | Paginated comments, oldest first |
+| GET | /api/incidents/{incidentId}/comments/{commentId} | Current content, author, edited flag, version, timestamps |
+| PUT | /api/incidents/{incidentId}/comments/{commentId} | Author-only edit with expected version |
+| GET | /api/incidents/{incidentId}/comments/{commentId}/history | Paginated immutable revisions in revision-number order |
+
+Create body: {"comment":"Investigating database connections"}.
+Edit body: {"comment":"Connection pool exhaustion confirmed","version":0}.
+
+Comment text is trimmed, required, and limited to 10,000 characters. Each new comment starts at version/revision 0; each edit creates a new immutable snapshot and a COMMENT_EDITED timeline event containing the old and new text. COMMENT_ADDED records initial content. Responses expose commentId on linked timeline entries and a revision number in metadata. An unchanged edit creates no revision or event. Missing or negative versions return 400; stale or concurrent edits return 409. There are no comment, revision, or timeline delete endpoints.
+
+Comment lists and histories accept page (default 0) and size (default 20, range 1–100). Timeline queries additionally accept eventType, actorId, commentId, from, to, and direction (ASC by default; DESC supported). Filters combine with AND, timestamps use inclusive ISO 8601 bounds, and both results and total counts remain tenant-scoped. Timeline ordering uses createdAt and id in the requested direction.
+
+Example:
+
+    GET /api/incidents/{id}/timeline?eventType=COMMENT_EDITED&actorId={userId}&commentId={commentId}&from=2026-10-01T00:00:00Z&direction=DESC&page=0&size=20
+
+Migration V15 adds optimistic comment versions, a revision table, comment links on timeline events, and history indexes. PostgreSQL triggers reject UPDATE, DELETE, and TRUNCATE on timeline and revision tables. Comment identity (incident, author, creation time, ID) is fixed; edits must change content, increment the version, and set the edited flag. Deferred database checks require each comment insert/edit to have matching revision content and a timeline event before commit. All three records commit or roll back together. History entities are also marked immutable in Hibernate, and their repositories expose append/read operations only.
+
+Existing comments receive a LEGACY_SNAPSHOT at migration time with their current text and an unknown editor. Earlier text or editor identities cannot be reconstructed. Existing timeline entries are retained. Database owners and superusers can disable triggers; production runtime credentials should be separate from the migration owner and have no DDL privileges. These protections apply to incident collaboration history; the separate audit_logs module remains a domain scaffold.
+
+PostgreSQL integration tests exercise revision history, author-only edits, tenant isolation, query filters, closed-incident discussion, input validation, stale/concurrent edits, SQL tampering, deferred history checks, rollback after timeline failure, and migration of existing comments. Disposable database fixture cleanup uses owner-only trigger changes inside a transaction; application code has no cleanup bypass.
 
 ## Verification and CI
 
