@@ -10,6 +10,9 @@ import jakarta.persistence.*;
 import lombok.Getter;
 
 import java.time.Instant;
+import java.util.Objects;
+import com.husseinabonoktah.opsflowbackend.incident.domain.exception.InvalidIncidentTransitionException;
+import com.husseinabonoktah.opsflowbackend.shared.exception.ResourceConflictException;
 
 @Entity
 @Table(
@@ -75,5 +78,76 @@ public class Incident extends AuditableEntity {
 
 
     protected Incident() {
+    }
+
+    public static Incident open(Organization organization, String incidentNumber, String title,
+                                String description, Severity severity, User createdBy) {
+        Incident incident = new Incident();
+        incident.organization = Objects.requireNonNull(organization);
+        incident.incidentNumber = Objects.requireNonNull(incidentNumber);
+        incident.title = Objects.requireNonNull(title);
+        incident.description = description;
+        incident.severity = Objects.requireNonNull(severity);
+        incident.createdBy = Objects.requireNonNull(createdBy);
+        incident.status = IncidentStatus.OPEN;
+        return incident;
+    }
+
+    public void acknowledge() {
+        transition(IncidentStatus.OPEN, IncidentStatus.ACKNOWLEDGED);
+        acknowledgedAt = Instant.now();
+    }
+
+    public void startInvestigation() {
+        transition(IncidentStatus.ACKNOWLEDGED, IncidentStatus.INVESTIGATING);
+    }
+
+    public void mitigate() {
+        transition(IncidentStatus.INVESTIGATING, IncidentStatus.MITIGATED);
+        mitigatedAt = Instant.now();
+    }
+
+    public void resolve() {
+        transition(IncidentStatus.MITIGATED, IncidentStatus.RESOLVED);
+        resolvedAt = Instant.now();
+    }
+
+    public void close() {
+        transition(IncidentStatus.RESOLVED, IncidentStatus.CLOSED);
+        closedAt = Instant.now();
+    }
+
+    public void updateDetails(String title, String description) {
+        requireEditable();
+        this.title = Objects.requireNonNull(title);
+        this.description = description;
+    }
+
+    public void assign(Team team, User user) {
+        requireEditable();
+        if ((team != null && !Objects.equals(organization.getId(), team.getOrganization().getId()))
+                || (user != null && !Objects.equals(organization.getId(), user.getOrganization().getId()))) {
+            throw new ResourceConflictException("Assignees must belong to the incident organization.");
+        }
+        assignedTeam = team;
+        assignedUser = user;
+    }
+
+    public void changeSeverity(Severity severity) {
+        requireEditable();
+        this.severity = Objects.requireNonNull(severity);
+    }
+
+    private void transition(IncidentStatus expected, IncidentStatus target) {
+        if (status != expected) {
+            throw new InvalidIncidentTransitionException(status, target);
+        }
+        status = target;
+    }
+
+    private void requireEditable() {
+        if (status == IncidentStatus.CLOSED) {
+            throw new ResourceConflictException("Closed incidents cannot be edited.");
+        }
     }
 }

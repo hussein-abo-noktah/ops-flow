@@ -10,6 +10,7 @@ import java.time.Instant;
 
 @Entity
 @Getter
+@org.hibernate.annotations.Immutable
 @Table(name = "incident_timeline")
 public class IncidentTimeline extends BaseEntity {
 
@@ -31,8 +32,13 @@ public class IncidentTimeline extends BaseEntity {
     @Column(name = "new_value", columnDefinition = "TEXT")
     private String newValue;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String metadata;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comment_id", updatable = false)
+    private IncidentComment comment;
 
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -44,5 +50,21 @@ public class IncidentTimeline extends BaseEntity {
     }
 
     protected IncidentTimeline() {
+    }
+
+    public IncidentTimeline(Incident incident, TimelineEventType eventType, User actor,
+                            String oldValue, String newValue) {
+        this(incident, eventType, actor, oldValue, newValue, null, null);
+    }
+
+    public IncidentTimeline(Incident incident, TimelineEventType eventType, User actor,
+                            String oldValue, String newValue, IncidentComment comment, String metadata) {
+        this.incident = incident;
+        this.eventType = eventType;
+        this.actor = actor;
+        this.oldValue = oldValue;
+        this.newValue = newValue;
+        this.comment = comment;
+        this.metadata = metadata;
     }
 }
