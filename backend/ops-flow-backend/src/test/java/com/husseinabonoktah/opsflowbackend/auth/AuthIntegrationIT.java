@@ -84,7 +84,6 @@ class AuthIntegrationIT {
 
     @BeforeEach
     void setup() {
-        // This isolated auth database has no incidents; do not truncate history tables.
         jdbc.update("DELETE FROM refresh_tokens");
         jdbc.update("DELETE FROM user_roles");
         jdbc.update("DELETE FROM role_permissions");
