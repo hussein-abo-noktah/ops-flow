@@ -5,7 +5,7 @@ Operation Management Platform, currently under development.
 ## Project contents
 
 - `backend/ops-flow-backend`: Spring Boot 4.1.2, Java 25, Maven Wrapper, Spring MVC, Spring Security, JPA, Flyway, and PostgreSQL.
-- `frontend/ops-flow-ui`: React 19 and Vite 8 starter application. Login and management screens are not implemented yet.
+- `frontend/ops-flow-ui`: React 19 and Vite 8 application with login, session refresh, and a responsive, permission-aware app shell. Module management screens are planned.
 - `compose.yaml`: Nginx frontend, backend, and PostgreSQL 17 with a persistent volume. Nginx forwards `/api/` to the backend.
 - `.github/workflows/ci.yml`: independent backend verification and frontend lint/build jobs using Java 25 and Node 24.
 
@@ -61,8 +61,36 @@ For frontend development, run from `frontend/ops-flow-ui`:
 npm ci
 npm run dev
 npm run lint
+npm test
+npm run typecheck
 npm run build
 ```
+
+### Frontend app shell
+
+Authenticated pages share a collapsible desktop sidebar, a sticky header with breadcrumbs and sign out, and a mobile navigation drawer below 801px. The drawer supports keyboard focus containment, Escape, outside-click dismissal, and focus restoration. Selecting a route or resizing to desktop closes it. A skip link and focused main content support keyboard navigation.
+
+The overview (`/`) links to the modules available to the current user. Menu visibility, module cards, direct route access, and `Can` controls share the same permission helper. `ROLE_PLATFORM_ADMIN` bypasses frontend permission requirements, consistent with backend permission checks.
+
+| Route | Access |
+| --- | --- |
+| `/` | Any authenticated user |
+| `/incidents` | `incident:view` |
+| `/teams` | Any authenticated user; team reads have no separate backend permission |
+| `/users` | `user:view` |
+| `/audit-logs` | `audit:view` |
+
+Restricted direct URLs display an access-denied page within the shell; unknown URLs display a not-found page. Module routes currently display explicit placeholders, without fetching or displaying operational data. Frontend visibility checks support navigation; backend endpoint authorization remains responsible for protecting data.
+
+`npm test` covers permission decisions using Node 24's built-in test runner. `npm run typecheck` validates the application and Vite configuration.
+
+The login page is available to signed-out users. Signed-in users visiting `/login`
+are redirected to the dashboard (`/`), after session restoration completes.
+Access tokens live in Redux memory (`auth.accessToken`) and are attached to API
+requests as bearer tokens. Only the rotating refresh token is persisted in Session
+Storage under `opsflow.refreshToken`; reloading obtains a new access token through
+`/api/auth/refresh`. Successful sign out revokes the refresh token and clears both
+the stored refresh token and in-memory authentication state.
 
 For a direct backend run, set absolute key resource URLs before changing directories (PowerShell, from the repository root):
 
@@ -130,6 +158,23 @@ Malformed request bodies return 400. Invalid credentials and invalid/expired/rev
 TTL values use ISO-8601 durations and must be at least one second. Backend instances that issue tokens need the same RSA key pair and database. Services that only verify JWTs need only the public key. Replacing the key pair invalidates existing access tokens. `AUTH_JWT_SECRET` is no longer used. `AUTH_COOKIE_SECURE` is unused because auth does not use cookies.
 
 ### Initial administrator
+
+For a local development database, an optional SQL seed is available at
+`backend/ops-flow-backend/src/main/resources/db/seed/admin.sql`. Start the backend
+once so Flyway has created the schema, then run from the repository root in PowerShell:
+
+```powershell
+Get-Content -Raw backend/ops-flow-backend/src/main/resources/db/seed/admin.sql |
+    docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+Sign in with **admin@opsflow.local** / **OpsFlow@Admin123!**. The seed creates an
+ACTIVE development organization, ACTIVE administrator, and system `PLATFORM_ADMIN`
+role in one transaction. It can be rerun; an existing email match (case-insensitive)
+is left unchanged, including its password and roles. It does not run automatically
+and must only be applied to a local development database.
+
+For configurable initial credentials, use the bootstrap runner below.
 
 `auth.application.BootstrapAdmin` is an opt-in startup runner. To provision the first account, set these values in `.env` for Compose, or export them for a direct backend run:
 

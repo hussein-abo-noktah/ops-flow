@@ -5,6 +5,18 @@ import {ApiError} from "@/shared/api/apiError.ts";
 
 const refreshTokenKey = 'opsflow.refreshToken';
 
+export async function logout(): Promise<void> {
+    const refreshToken = sessionStorage.getItem(refreshTokenKey);
+    if (refreshToken) {
+        try {
+            await authClient.post('/auth/logout', {refreshToken});
+        } catch (error) {
+            throw normalizeApiError(error);
+        }
+    }
+    sessionStorage.removeItem(refreshTokenKey);
+}
+
 
 export async function login(data: LoginRequest): Promise<AuthResponse> {
     try {

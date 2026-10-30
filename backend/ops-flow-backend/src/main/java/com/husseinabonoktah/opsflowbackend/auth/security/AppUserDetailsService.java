@@ -22,7 +22,7 @@ public class AppUserDetailsService
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, noRollbackFor = UsernameNotFoundException.class)
     @NonNull
     public UserDetails loadUserByUsername(
             @NonNull

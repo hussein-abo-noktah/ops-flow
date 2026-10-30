@@ -1,6 +1,7 @@
 import type {
     RootState,
 } from '@/app/store/store';
+import {hasPermission} from '@/modules/auth/utils/permissions.ts';
 
 export const selectCurrentUser =
     (state: RootState) =>
@@ -15,7 +16,4 @@ export const selectHasPermission =
         state: RootState,
         permission: string
     ) =>
-        state.auth.user
-            ?.permissions
-            .includes(permission)
-        ?? false;
+        hasPermission(state.auth.user, permission);
