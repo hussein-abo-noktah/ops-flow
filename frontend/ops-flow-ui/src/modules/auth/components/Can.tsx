@@ -5,6 +5,7 @@ import type {
 import {
     useAppSelector,
 } from '@/app/store/hooks';
+import {selectHasPermission} from '@/modules/auth/store/authSelectors.ts';
 
 interface CanProps
     extends PropsWithChildren {
@@ -19,11 +20,7 @@ export function Can({
 
     const allowed =
         useAppSelector(
-            state =>
-                state.auth.user
-                    ?.permissions
-                    .includes(permission)
-                ?? false
+            state => selectHasPermission(state, permission)
         );
 
     if (!allowed) {

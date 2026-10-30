@@ -16,6 +16,7 @@ import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.*;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,6 +29,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -251,6 +253,64 @@ class AuthIntegrationIT {
                 .containsExactlyInAnyOrder("ROLE_PLATFORM_ADMIN", "ROLE_RESPONDER", "incident:view");
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + field(admin, "accessToken")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.authorities").isArray());
+    }
+
+    @Test
+    void developmentAdminSeedSupportsLoginAndDoesNotResetCredentialsOnRerun() throws Exception {
+        applyAdminSeed();
+
+        var result = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"admin@opsflow.local\",\"password\":\"OpsFlow@Admin123!\"}"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(decoder.decode(field(result, "accessToken")).getClaimAsStringList("authorities"))
+                .contains("ROLE_PLATFORM_ADMIN");
+
+        var replacementHash = passwords.encode("replacement-password");
+        jdbc.update("UPDATE users SET password_hash=? WHERE email='admin@opsflow.local'", replacementHash);
+        applyAdminSeed();
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Long.class)).isEqualTo(2L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM organizations", Long.class)).isEqualTo(2L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM roles", Long.class)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_roles", Long.class)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT password_hash FROM users WHERE email='admin@opsflow.local'", String.class))
+                .isEqualTo(replacementHash);
+        assertThat(users.findById(user.getId()).orElseThrow().getEmail()).isEqualTo("alice@example.com");
+    }
+
+    @Test
+    void developmentAdminSeedDoesNotPromoteAnExistingCaseInsensitiveEmailMatch() throws Exception {
+        jdbc.update("UPDATE users SET email='ADMIN@OPSFLOW.LOCAL' WHERE id=?", user.getId());
+        applyAdminSeed();
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Long.class)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM organizations", Long.class)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM roles", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_roles", Long.class)).isZero();
+        assertThat(passwords.matches("secure-password",
+                jdbc.queryForObject("SELECT password_hash FROM users WHERE id=?", String.class, user.getId())))
+                .isTrue();
+    }
+
+    @Test
+    void unknownEmailReturnsTheSameUnauthorizedProblemAsAnIncorrectPassword() throws Exception {
+        var unknown = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"missing@example.com\",\"password\":\"wrong-password\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andReturn();
+        var incorrect = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"alice@example.com\",\"password\":\"wrong-password\"}"))
+                .andExpect(status().isUnauthorized()).andReturn();
+
+        assertThat(json.readTree(unknown.getResponse().getContentAsString()).get("detail").asString())
+                .isEqualTo(json.readTree(incorrect.getResponse().getContentAsString()).get("detail").asString());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM refresh_tokens", Long.class)).isZero();
+        assertThat(users.findById(user.getId()).orElseThrow().getLastLoginAt()).isNull();
+    }
+
+    private void applyAdminSeed() throws Exception {
+        jdbc.execute(new ClassPathResource("db/seed/admin.sql").getContentAsString(StandardCharsets.UTF_8));
     }
 
     private JwtClaimsSet.Builder claims(Jwt jwt) {
