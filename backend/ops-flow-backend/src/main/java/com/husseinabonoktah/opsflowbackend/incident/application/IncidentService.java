@@ -19,7 +19,7 @@ import org.springframework.data.domain.*;
 import java.util.*;
 import java.util.function.Consumer;
 import tools.jackson.databind.ObjectMapper;
-import static com.husseinabonoktah.opsflowbackend.incident.infrastructure.persistence.specification.IncidentSpecifications.*;
+import com.husseinabonoktah.opsflowbackend.incident.infrastructure.persistence.specification.IncidentSpecification;
 
 @Service
 @RequiredArgsConstructor
@@ -39,21 +39,14 @@ public class IncidentService {
         var organization = organizations.findById(currentUser.organizationId())
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found."));
         User actor = actor();
-        Incident incident = repository.saveAndFlush(mapper.toEntity(request, organization, actor));
+        String incidentNumber = String.format(Locale.ROOT, "INC-%06d", repository.nextIncidentNumber());
+        Incident incident = repository.saveAndFlush(mapper.toEntity(request, organization, actor, incidentNumber));
         timeline.record(incident, TimelineEventType.INCIDENT_CREATED, actor, null, incident.getStatus().name());
         return mapper.toResponse(incident);
     }
     public IncidentResponse getById(UUID id) { return mapper.toResponse(findById(id)); }
     public Page<IncidentResponse> search(IncidentSearchRequest request) {
-        var specification = inOrganization(currentUser.organizationId())
-                .and(matchingText(request.q()))
-                .and(hasStatus(request.status()))
-                .and(hasSeverity(request.severity()))
-                .and(assignedToTeam(request.assignedTeamId()))
-                .and(assignedToUser(request.assignedUserId()))
-                .and(createdBy(request.createdBy()))
-                .and(createdFrom(request.createdFrom()))
-                .and(createdTo(request.createdTo()));
+        var specification = new IncidentSpecification(request.toFilter(), currentUser.organizationId());
         return repository.findAll(specification, request.toPageable()).map(mapper::toResponse);
     }
     @Transactional

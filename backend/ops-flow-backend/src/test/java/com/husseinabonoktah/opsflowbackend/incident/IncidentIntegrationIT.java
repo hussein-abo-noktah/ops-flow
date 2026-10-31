@@ -51,6 +51,7 @@ class IncidentIntegrationIT extends BaseIntegrationTest {
                         """))
                 .andExpect(status().isCreated()).andExpect(header().exists("Location"))
                 .andExpect(jsonPath("$.title").value("Outage"))
+                .andExpect(jsonPath("$.incidentNumber").value(org.hamcrest.Matchers.matchesPattern("INC-[0-9]{6,}")))
                 .andExpect(jsonPath("$.status").value("OPEN"))
                 .andExpect(jsonPath("$.createdBy").value(actor.getId().toString()));
         Incident incident = incidents.findAllByOrganizationId(organization.getId(), Pageable.unpaged()).getContent().getFirst();
@@ -241,6 +242,17 @@ class IncidentIntegrationIT extends BaseIntegrationTest {
             assertThat(events(incident)).isEmpty();
         } finally {
             incidents.deleteById(incident.getId()); users.deleteById(actor.getId()); organizations.deleteById(organization.getId());
+        }
+    }
+
+    @Test
+    void allocatesDistinctNumbersForConcurrentCreates() throws Exception {
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(4)) {
+            var calls = new ArrayList<java.util.concurrent.Callable<Long>>();
+            for (int i = 0; i < 20; i++) calls.add(incidents::nextIncidentNumber);
+            var numbers = new ArrayList<Long>();
+            for (var result : executor.invokeAll(calls)) numbers.add(result.get());
+            assertThat(numbers).doesNotHaveDuplicates().allMatch(number -> number > 0);
         }
     }
 

@@ -2,6 +2,7 @@ package com.husseinabonoktah.opsflowbackend.incident.api.request;
 
 import com.husseinabonoktah.opsflowbackend.incident.domain.IncidentStatus;
 import com.husseinabonoktah.opsflowbackend.incident.domain.Severity;
+import com.husseinabonoktah.opsflowbackend.incident.domain.filter.IncidentFilter;
 import jakarta.validation.constraints.*;
 import org.springframework.data.domain.*;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -40,6 +41,11 @@ public record IncidentSearchRequest(
     @AssertTrue(message = "The requested page offset is too large.")
     public boolean isOffsetValid() {
         return (long) page * size <= Integer.MAX_VALUE;
+    }
+
+    public IncidentFilter toFilter() {
+        return new IncidentFilter(q, status, severity, assignedTeamId, assignedUserId, createdBy,
+                createdFrom, createdTo);
     }
 
     public Pageable toPageable() {

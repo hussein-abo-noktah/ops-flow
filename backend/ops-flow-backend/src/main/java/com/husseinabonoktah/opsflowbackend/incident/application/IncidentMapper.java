@@ -6,11 +6,10 @@ import com.husseinabonoktah.opsflowbackend.incident.api.response.*;
 import com.husseinabonoktah.opsflowbackend.organization.domain.Organization;
 import com.husseinabonoktah.opsflowbackend.user.domain.User;
 import org.springframework.stereotype.Component;
-import java.util.UUID;
 @Component
 public class IncidentMapper {
-    public Incident toEntity(CreateIncidentRequest request, Organization organization, User actor) {
-        return Incident.open(organization, "INC-" + UUID.randomUUID(), request.title(),
+    public Incident toEntity(CreateIncidentRequest request, Organization organization, User actor, String incidentNumber) {
+        return Incident.open(organization, incidentNumber, request.title(),
                 request.description(), request.severity(), actor);
     }
     public IncidentResponse toResponse(Incident i) {
