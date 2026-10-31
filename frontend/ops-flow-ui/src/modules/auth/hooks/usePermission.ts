@@ -1,11 +1,8 @@
 import {useAppSelector} from "@/app/store/hooks.ts";
+import {selectHasPermission} from '../store/authSelectors.ts';
 
 export function usePermission( permission :string){
     return useAppSelector(
-        state =>
-            state.auth.user
-                ?.permissions
-                .includes(permission)
-            ?? false
+        state => selectHasPermission(state, permission)
     );
 }
