@@ -1,4 +1,5 @@
 import type {Incident} from '@/modules/incidents/types/incident.types.ts';
+import {Link} from 'react-router';
 import {IncidentStatusBadge} from '@/modules/incidents/component/IncidentStatusBadge.tsx';
 import {IncidentSeverityBadge} from '@/modules/incidents/component/IncidentSeverityBadge.tsx';
 import {statusActions} from '@/modules/incidents/utils/incidentList.ts';
@@ -23,7 +24,7 @@ export function IncidentTable({incidents, canUpdate, canResolve, disabled, pendi
                 const next = statusActions[incident.status];
                 const allowed = next && (next.permission === 'incident:resolve' ? canResolve : canUpdate);
                 return <tr key={incident.id}>
-                    <th scope="row">{incident.incidentNumber}</th>
+                    <th scope="row"><Link to={`/incidents/${encodeURIComponent(incident.id)}`}>{incident.incidentNumber}</Link></th>
                     <td className="incident-title"><strong>{incident.title}</strong>{incident.description && <details><summary>Description</summary><p>{incident.description}</p></details>}</td>
                     <td><IncidentSeverityBadge severity={incident.severity} /></td>
                     <td><IncidentStatusBadge status={incident.status} /></td>

@@ -3,6 +3,7 @@ package com.husseinabonoktah.opsflowbackend.incident.infrastructure.persistence;
 import com.husseinabonoktah.opsflowbackend.incident.domain.IncidentTimeline;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.EntityGraph;
 import com.husseinabonoktah.opsflowbackend.incident.domain.TimelineEventType;
 import java.time.Instant;
 import org.springframework.data.domain.*;
@@ -12,6 +13,7 @@ public interface IncidentTimelineRepository extends Repository<IncidentTimeline,
     Page<IncidentTimeline> findAllByIncidentIdAndIncidentOrganizationId(
             UUID incidentId, UUID organizationId, Pageable pageable);
 
+    @EntityGraph(attributePaths = "actor")
     @Query("""
             select e from IncidentTimeline e
             where e.incident.id = :incidentId and e.incident.organization.id = :organizationId

@@ -5,6 +5,6 @@ import java.time.Instant;
 import java.util.UUID;
 public record IncidentResponse(UUID id, UUID organizationId, String incidentNumber,
         String title, String description, Severity severity, IncidentStatus status,
-        UUID assignedTeamId, UUID assignedUserId, UUID createdBy,
+        UUID assignedTeamId, UUID assignedUserId, UUID createdBy, String createdByName,
         Instant acknowledgedAt, Instant mitigatedAt, Instant resolvedAt, Instant closedAt,
         Instant createdAt, Instant updatedAt, Long version) {}

@@ -53,7 +53,8 @@ class IncidentIntegrationIT extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.title").value("Outage"))
                 .andExpect(jsonPath("$.incidentNumber").value(org.hamcrest.Matchers.matchesPattern("INC-[0-9]{6,}")))
                 .andExpect(jsonPath("$.status").value("OPEN"))
-                .andExpect(jsonPath("$.createdBy").value(actor.getId().toString()));
+                .andExpect(jsonPath("$.createdBy").value(actor.getId().toString()))
+                .andExpect(jsonPath("$.createdByName").value("Alice Smith"));
         Incident incident = incidents.findAllByOrganizationId(organization.getId(), Pageable.unpaged()).getContent().getFirst();
         assertThat(incident.getTitle()).isEqualTo("Outage");
         String path = URL + "/" + incident.getId();
@@ -64,16 +65,22 @@ class IncidentIntegrationIT extends BaseIntegrationTest {
                     .andExpect(jsonPath("$.status").value(IncidentStatus.values()[i + 1].name()));
         }
         mvc.perform(get(path).with(auth("incident:view"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.createdByName").value("Alice Smith"))
                 .andExpect(jsonPath("$.acknowledgedAt").isNotEmpty())
                 .andExpect(jsonPath("$.mitigatedAt").isNotEmpty())
                 .andExpect(jsonPath("$.resolvedAt").isNotEmpty())
                 .andExpect(jsonPath("$.closedAt").isNotEmpty());
+        mvc.perform(get(URL).with(auth("incident:view")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].createdBy").value(actor.getId().toString()))
+                .andExpect(jsonPath("$.content[0].createdByName").value("Alice Smith"));
         mvc.perform(get(path + "/timeline").with(auth("incident:view")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.page.totalElements").value(6))
                 .andExpect(jsonPath("$.content[0].eventType").value("INCIDENT_CREATED"))
                 .andExpect(jsonPath("$.content[5].oldValue").value("RESOLVED"))
                 .andExpect(jsonPath("$.content[5].newValue").value("CLOSED"))
-                .andExpect(jsonPath("$.content[5].actorId").value(actor.getId().toString()));
+                .andExpect(jsonPath("$.content[5].actorId").value(actor.getId().toString()))
+                .andExpect(jsonPath("$.content[5].actorName").value("Alice Smith"));
         mvc.perform(put(path).with(auth("incident:update")).contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"title":"Changed"}

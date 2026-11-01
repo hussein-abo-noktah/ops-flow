@@ -6,7 +6,7 @@ import {normalizeApiError} from '@/shared/api/normalizeApiError.ts';
 import {PaginationProps as Pagination} from '@/shared/components/PaginationProps.tsx';
 import {IncidentFilters} from '@/modules/incidents/component/IncidentFilters.tsx';
 import {IncidentTable} from '@/modules/incidents/component/IncidentTable.tsx';
-import {pageSizes, readIncidentParams, type IncidentAction} from '../utils/incidentList.ts';
+import {pageSizes, readIncidentParams, type IncidentAction} from '@/modules/incidents/utils/incidentList.ts';
 import type {Incident} from '@/modules/incidents/types/incident.types.ts';
 import './IncidentsPage.css';
 

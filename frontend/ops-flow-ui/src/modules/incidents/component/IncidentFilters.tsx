@@ -1,5 +1,5 @@
 import type {IncidentSearchParams} from '@/modules/incidents/types/incident.types.ts';
-import {incidentSeverities, incidentSorts, incidentStatuses, statusLabel} from '../utils/incidentList.ts';
+import {incidentSeverities, incidentSorts, incidentStatuses, statusLabel} from '@/modules/incidents/utils/incidentList.ts';
 
 interface Props {
     params: IncidentSearchParams;

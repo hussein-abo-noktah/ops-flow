@@ -1,6 +1,7 @@
-import type {IncidentSearchParams} from "@/modules/incidents/types/incident.types.ts";
+import type {IncidentDirectoryResource, IncidentSearchParams} from "@/modules/incidents/types/incident.types.ts";
 
 export const incidentKeys = {
+    directory: (resource: IncidentDirectoryResource) => ['incident-directory', resource] as const,
     all: ['incidents'] as const,
 
     lists: () =>
@@ -22,4 +23,6 @@ export const incidentKeys = {
             ...incidentKeys.details(),
             id,
         ] as const,
+    timeline: (id: string, page: number) => [...incidentKeys.detail(id), 'timeline', page] as const,
+    comments: (id: string, page: number) => [...incidentKeys.detail(id), 'comments', page] as const,
 };

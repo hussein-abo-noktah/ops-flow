@@ -4,21 +4,22 @@ import {createServer} from 'vite';
 import {createElement as h} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {Provider} from 'react-redux';
-import {MemoryRouter} from 'react-router-dom';
+import {MemoryRouter, Routes, Route} from 'react-router-dom';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {incidentKeys} from '@/modules/incidents/query/incidentKeys.ts';
 import {readIncidentParams} from '@/modules/incidents/utils/incidentList.ts';
 
-let server, IncidentsPage, store, setAuth, apiClient, api;
+let server, IncidentsPage, IncidentDetailPage, store, setAuth, apiClient, api;
 const incident = {
     id: 'incident-1', incidentNumber: 'INC-001', title: 'Database timeout', description: 'Investigate connection pool',
-    status: 'OPEN', severity: 'SEV1', createdBy: 'user-1', createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:00:00Z', version: 0,
+    status: 'OPEN', severity: 'SEV1', createdBy: 'user-1', createdByName: 'Alice Smith', createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:00:00Z', version: 0,
 };
 const page = {items: [incident], page: 0, size: 20, totalItems: 1, totalPages: 1, first: true, last: true};
 
 before(async () => {
     server = await createServer({server: {middlewareMode: true, hmr: false}, appType: 'custom'});
     ({IncidentsPage} = await server.ssrLoadModule('/src/modules/incidents/pages/IncidentsPage.tsx'));
+    ({IncidentDetailPage} = await server.ssrLoadModule('/src/modules/incidents/pages/IncidentDetailPage.tsx'));
     ({store} = await server.ssrLoadModule('/src/app/store/store.ts'));
     ({setAuth} = await server.ssrLoadModule('/src/modules/auth/store/authSlice.ts'));
     ({apiClient} = await server.ssrLoadModule('/src/shared/api/apiClient.ts'));
@@ -106,4 +107,105 @@ test('lifecycle actions call the existing backend endpoints', async () => {
     } finally {
         apiClient.defaults.adapter = original;
     }
+});
+
+async function renderDetail({permissions = ['incident:view'], status = 'OPEN', loading = false} = {}) {
+    store.dispatch(setAuth({accessToken: 'test-token', user: {id: 'user-1', organizationId: 'org-1', permissions, roles: []}}));
+    const client = new QueryClient({defaultOptions: {queries: {retry: false, staleTime: Infinity}}});
+    const history = {content: [], page: {number: 0, size: 20, totalElements: 0, totalPages: 0}};
+    if (!loading) client.setQueryData(incidentKeys.detail(incident.id), {...incident, status});
+    client.setQueryData(incidentKeys.timeline(incident.id, 0), {...history, content: [{id: 'event-1', eventType: 'INCIDENT_CREATED', actorId: 'user-1', actorName: 'Alice Smith', createdAt: incident.createdAt, oldValue: null, newValue: 'OPEN'}]});
+    client.setQueryData(incidentKeys.comments(incident.id, 0), {...history, content: [
+        {id: 'comment-1', userId: 'user-1', comment: 'My investigation notes', version: 2, createdAt: incident.createdAt},
+        {id: 'comment-2', userId: 'user-2', comment: 'Another investigator', version: 0, createdAt: incident.createdAt},
+    ]});
+    for (const resource of ['teams', 'users']) client.setQueryData(['incident-directory', resource], []);
+    try {
+        return renderToStaticMarkup(h(Provider, {store}, h(QueryClientProvider, {client}, h(MemoryRouter, {initialEntries: [`/incidents/${incident.id}`]}, h(Routes, {}, h(Route, {path: '/incidents/:id', element: h(IncidentDetailPage)}))))));
+    } finally { client.clear(); }
+}
+
+test('detail query renders header, version, assignment, timeline and comments for viewers', async () => {
+    assert.match(await renderDetail({loading: true}), /Loading incident/);
+    const html = await renderDetail();
+    for (const text of ['INC-001', 'Database timeout', 'SEV1', 'Version 0', 'Assigned team', 'Unassigned', 'incident created', 'My investigation notes']) assert.ok(html.includes(text), text);
+    assert.doesNotMatch(html, /Edit details|Edit comment|Post comment|Assign team|>Acknowledge</);
+    assert.match(html, /By Alice Smith/);
+    assert.match(html, /<dt>Created by<\/dt><dd>Alice Smith<\/dd>/);
+    assert.doesNotMatch(html, /By user-1/);
+});
+
+test('detail actions respect update, assign, resolve and comment ownership', async () => {
+    const editor = await renderDetail({permissions: ['incident:view', 'incident:update']});
+    assert.match(editor, /Edit details/);
+    assert.match(editor, /Post comment/);
+    assert.match(editor, />Acknowledge</);
+    assert.equal((editor.match(/>Edit comment</g) || []).length, 1);
+    assert.doesNotMatch(editor, /Assign team/);
+    const assigner = await renderDetail({permissions: ['incident:view', 'incident:assign']});
+    assert.match(assigner, /Assign team/);
+    assert.doesNotMatch(assigner, /Edit details|Post comment/);
+    assert.doesNotMatch(await renderDetail({permissions: ['incident:update'], status: 'MITIGATED'}), />Resolve</);
+    assert.match(await renderDetail({permissions: ['incident:resolve'], status: 'MITIGATED'}), />Resolve</);
+    assert.match(await renderDetail({permissions: ['incident:resolve'], status: 'CLOSED'}), /This incident is closed/);
+});
+
+test('detail API uses cancellation, history pagination and versioned comment edits', async () => {
+    const original = apiClient.defaults.adapter;
+    const calls = [];
+    const signal = new AbortController().signal;
+    try {
+        apiClient.defaults.adapter = async config => {
+            calls.push(config);
+            return {config, headers: {}, status: 200, statusText: 'OK', data: incident};
+        };
+        await api.getIncident(incident.id, signal);
+        await api.getIncidentTimeline(incident.id, 2, signal);
+        await api.getIncidentComments(incident.id, 3, signal);
+        await api.changeIncident(incident.id, {kind: 'details', title: 'New title', description: 'Details'});
+        await api.changeIncident(incident.id, {kind: 'assign', teamId: null, userId: 'user-1'});
+        await api.changeIncident(incident.id, {kind: 'severity', severity: 'SEV2'});
+        await api.saveIncidentComment(incident.id, 'Updated notes', {id: 'comment-1', version: 7});
+        assert.equal(calls[0].url, '/incidents/incident-1');
+        assert.equal(calls[0].signal, signal);
+        assert.deepEqual(calls[1].params, {page: 2, size: 20, direction: 'DESC'});
+        assert.deepEqual(calls[2].params, {page: 3, size: 20});
+        assert.equal(calls[3].method, 'put');
+        assert.deepEqual(JSON.parse(calls[3].data), {title: 'New title', description: 'Details'});
+        assert.equal(calls[4].url, '/incidents/incident-1/assign');
+        assert.deepEqual(JSON.parse(calls[4].data), {teamId: null, userId: 'user-1'});
+        assert.equal(calls[5].url, '/incidents/incident-1/severity');
+        assert.equal(calls[6].method, 'put');
+        assert.equal(calls[6].url, '/incidents/incident-1/comments/comment-1');
+        assert.deepEqual(JSON.parse(calls[6].data), {comment: 'Updated notes', version: 7});
+    } finally { apiClient.defaults.adapter = original; }
+});
+
+test('assignment saves preserve the latest untouched assignee and allow explicit unassignment', async () => {
+    const original = apiClient.defaults.adapter;
+    const writes = [];
+    try {
+        apiClient.defaults.adapter = async config => {
+            if (config.method === 'post') writes.push(JSON.parse(config.data));
+            return {config, headers: {}, status: 200, statusText: 'OK', data: {...incident, assignedTeamId: 'latest-team', assignedUserId: 'latest-user'}};
+        };
+        await api.assignIncident(incident.id, {teamId: 'selected-team'});
+        await api.assignIncident(incident.id, {userId: null});
+        await api.assignIncident(incident.id, {teamId: null, userId: null});
+        assert.deepEqual(writes, [
+            {teamId: 'selected-team', userId: 'latest-user'},
+            {teamId: 'latest-team', userId: null},
+            {teamId: null, userId: null},
+        ]);
+    } finally {apiClient.defaults.adapter = original;}
+});
+
+test('assignment does not write when refreshing the latest incident fails', async () => {
+    const original = apiClient.defaults.adapter;
+    const calls = [];
+    try {
+        apiClient.defaults.adapter = async config => {calls.push(config.method); throw new Error('offline');};
+        await assert.rejects(api.assignIncident(incident.id, {teamId: 'selected-team'}));
+        assert.deepEqual(calls, ['get']);
+    } finally {apiClient.defaults.adapter = original;}
 });

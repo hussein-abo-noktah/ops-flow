@@ -1,8 +1,8 @@
 import {NavLink} from 'react-router';
 import {useAppSelector} from '@/app/store/hooks';
 import {selectCurrentUser} from '@/modules/auth/store/authSelectors';
-import {getVisibleNavigation} from './navigation';
-import {NavigationIcon} from './NavigationIcon';
+import {getVisibleNavigation} from '@/app/navigation/navigation.ts';
+import {NavigationIcon} from '@/app/navigation/NavigationIcon.tsx';
 
 export function Sidebar({collapsed = false, onNavigate}: {collapsed?: boolean; onNavigate?: () => void}) {
     const user = useAppSelector(selectCurrentUser);
