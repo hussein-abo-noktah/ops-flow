@@ -12,7 +12,7 @@ import {refreshAccessToken} from '@/shared/api/tokenRefresh';
 
 import {
     clearAuth,
-} from '../store/authSlice';
+} from '@/modules/auth/store/authSlice.ts';
 
 export function AuthBootstrap({
                                   children,

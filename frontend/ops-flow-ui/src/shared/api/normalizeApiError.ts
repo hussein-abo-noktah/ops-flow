@@ -1,5 +1,5 @@
 import axios from 'axios';
-import {ApiError, type ApiErrorResponse} from './apiError.ts';
+import {ApiError, type ApiErrorResponse} from '@/shared/api/apiError.ts';
 
 const httpMessages: Record<number, string> = {
     400: 'Please check your request and try again.',

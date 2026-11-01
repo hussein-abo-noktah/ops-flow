@@ -1,0 +1,22 @@
+.incident-back { display: inline-block; margin-bottom: 24px; color: #176b5b; font-size: 13px; }
+.incident-detail .page-heading h1 { overflow-wrap: anywhere; }
+.incident-detail-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 22px; }
+.incident-detail-section { padding: 24px; min-width: 0; }
+.incident-detail-section h2 { margin: 0 0 20px; font-size: 17px; }
+.incident-detail-section h3 { margin-top: 24px; font-size: 14px; }
+.incident-detail-section p { color: #51676b; font-size: 13px; line-height: 1.6; }
+.incident-detail-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.incident-detail-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: #70818a; }
+.incident-detail-form { display: grid; gap: 14px; margin-block: 18px; }
+.incident-detail textarea { padding: 10px; border: 1px solid #d7e2de; border-radius: 7px; font: inherit; resize: vertical; width: 100%; box-sizing: border-box; }
+.incident-detail textarea:focus-visible { outline: 2px solid #176b5b; outline-offset: 3px; }
+.incident-detail-meta { display: grid; gap: 14px; margin-block: 24px; font-size: 12px; }
+.incident-detail-meta dt { color: #70818a; margin-bottom: 5px; }
+.incident-detail-meta dd { margin: 0; overflow-wrap: anywhere; }
+.incident-timeline, .incident-comments { list-style: none; padding: 0; margin: 20px 0; }
+.incident-timeline li { border-left: 2px solid #d7e2de; padding: 0 0 20px 18px; overflow-wrap: anywhere; }
+.incident-timeline strong { display: block; text-transform: capitalize; margin-bottom: 6px; font-size: 13px; }
+.incident-timeline time, .incident-comment-meta { font-size: 11px; color: #70818a; }
+.incident-comments li { padding-block: 18px; border-top: 1px solid #e7eeeb; }
+.incident-comment-meta { display: flex; flex-wrap: wrap; gap: 8px; overflow-wrap: anywhere; }
+@media (max-width: 900px) { .incident-detail-grid { grid-template-columns: minmax(0, 1fr); } }

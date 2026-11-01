@@ -1,4 +1,4 @@
-import type {AuthUser} from '../types/auth.types';
+import type {AuthUser} from '@/modules/auth/types/auth.types.ts';
 
 export function hasPermission(user: AuthUser | null, permission?: string): boolean {
     if (!user) return false;
