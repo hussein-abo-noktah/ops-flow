@@ -5,6 +5,9 @@ import com.husseinabonoktah.opsflowbackend.incident.api.request.CreateIncidentRe
 import com.husseinabonoktah.opsflowbackend.incident.api.response.*;
 import com.husseinabonoktah.opsflowbackend.organization.domain.Organization;
 import com.husseinabonoktah.opsflowbackend.user.domain.User;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 @Component
 public class IncidentMapper {
@@ -16,13 +19,20 @@ public class IncidentMapper {
         return new IncidentResponse(i.getId(), i.getOrganization().getId(), i.getIncidentNumber(),
                 i.getTitle(), i.getDescription(), i.getSeverity(), i.getStatus(),
                 i.getAssignedTeam() == null ? null : i.getAssignedTeam().getId(),
-                i.getAssignedUser() == null ? null : i.getAssignedUser().getId(), i.getCreatedBy().getId(),
+                i.getAssignedUser() == null ? null : i.getAssignedUser().getId(), i.getCreatedBy().getId(), userName(i.getCreatedBy()),
                 i.getAcknowledgedAt(), i.getMitigatedAt(), i.getResolvedAt(), i.getClosedAt(),
                 i.getCreatedAt(), i.getUpdatedAt(), i.getVersion());
     }
     public IncidentTimelineResponse toResponse(IncidentTimeline e) {
         return new IncidentTimelineResponse(e.getId(), e.getIncident().getId(), e.getEventType(),
-                e.getActor() == null ? null : e.getActor().getId(), e.getOldValue(), e.getNewValue(),
+                e.getActor() == null ? null : e.getActor().getId(), userName(e.getActor()), e.getOldValue(), e.getNewValue(),
                 e.getMetadata(), e.getCreatedAt(), e.getComment() == null ? null : e.getComment().getId());
+    }
+
+    private String userName(User actor) {
+        if (actor == null) return null;
+        return Stream.of(actor.getFirstName(), actor.getLastName())
+                .filter(Objects::nonNull).map(String::strip).filter(name -> !name.isEmpty())
+                .collect(Collectors.joining(" "));
     }
 }
